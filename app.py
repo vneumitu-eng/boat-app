@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-import re  # これを忘れずに追加しました
+import re
 
 st.title("🤖 AI競艇エンジン v7.0【完全自動版】")
 
@@ -25,14 +25,17 @@ if st.button("公式サイトからデータ取得・解析"):
         res = requests.get(url, headers=headers)
         soup = BeautifulSoup(res.text, "html.parser")
         
-        # 展示タイムの取得ロジック
+        # --- 改善点: 公式サイトのテーブル構造から直接抽出 ---
+        # 展示タイムは「is-number」または「is-fs18」などが含まれるセルにあります
         times = []
-        elements = soup.select(".is-fs18")
-        for el in elements:
-            text = el.text.strip()
-            # 6秒〜7秒台の形式かチェック
+        # すべてのセルを走査し、6.xx ~ 7.xx の形式を探す
+        for td in soup.find_all("td"):
+            text = td.text.strip()
             if re.match(r'^[67]\.\d{2}$', text):
                 times.append(float(text))
+        
+        # 重複削除（同じタイムが複数選手いた場合など）
+        times = sorted(list(set(times)))
         
         if times:
             best_time = min(times)
@@ -40,15 +43,14 @@ if st.button("公式サイトからデータ取得・解析"):
             
             st.success("データ取得成功！")
             st.metric("最速展示タイム", f"{best_time:.2f}秒")
-            st.write(f"平均タイム: {avg_time:.2f}秒")
             
-            if best_time < avg_time - 0.1:
+            if best_time < 6.50:
                 st.warning("★【勝負レース判定】: 爆速足検知。軸候補です！")
             else:
                 st.info("★【見送り推奨】: タイムが拮抗しています。")
         else:
-            st.error("展示タイムが取得できませんでした（まだ公開前か、サイト構造上の問題です）。")
-            st.write("確認用URL:", url)
+            st.error("展示タイムがHTML内に見つかりません。")
+            st.write("もし公式サイトに表示されているのに取れない場合は、まだデータが確定していないか、公式サイトの仕様変更の可能性があります。")
             
     except Exception as e:
         st.error(f"接続エラー: {e}")
