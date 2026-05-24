@@ -1,55 +1,63 @@
 import streamlit as st
-from PIL import Image
-import pytesseract
-import cv2
-import numpy as np
-import re
+import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
 
-st.title("AI競艇エンジン v7.0")
+# --- 1. 設定・マッピング ---
+st.set_page_config(page_title="AI競艇エンジン v7.0", layout="wide")
+st.title("🤖 AI競艇エンジン v7.0【完全自動版】")
 
-# --- 1. スクショ入力エリア ---
-uploaded_file = st.file_uploader("レース直前情報のスクショをアップロード", type=['png', 'jpg', 'jpeg'])
+jcd_map = {"桐生": "01", "戸田": "02", "江戸川": "03", "平和島": "04", "多摩川": "05", 
+           "浜名湖": "06", "蒲郡": "07", "常滑": "08", "津": "09", "三国": "10", 
+           "びわこ": "11", "住之江": "12", "尼崎": "13", "鳴門": "14", "丸亀": "15", 
+           "児島": "16", "宮島": "17", "徳山": "18", "下関": "19", "若松": "20", 
+           "芦屋": "21", "福岡": "22", "唐津": "23", "大村": "24"}
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="解析中...", use_column_width=True)
+# --- 2. 入力UI ---
+col1, col2 = st.columns(2)
+with col1:
+    stadium = st.selectbox("開催場を選択", list(jcd_map.keys()))
+with col2:
+    race_num = st.selectbox("レース番号", range(1, 13))
+
+# --- 3. メイン処理 ---
+if st.button("🚀 公式サイトから自動解析を実行"):
+    date_str = datetime.now().strftime("%Y%m%d")
+    url = f"https://www.boatrace.jp/owpc/pc/race/index?rno={race_num}&jcd={jcd_map[stadium]}&hd={date_str}"
     
-    # --- 2. 解析と判定の自動実行 ---
-    if st.button("AI解析・判定を実行"):
-        with st.spinner('解析中...'):
-            img_array = np.array(image.convert('RGB'))
-            height, width, _ = img_array.shape
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get(url, headers=headers)
+        soup = BeautifulSoup(res.text, "html.parser")
+        
+        # 展示タイム抽出 (.is-fs18 にタイムが格納されている)
+        time_elements = soup.select(".is-fs18")
+        times = [float(t.text.strip()) for t in time_elements if "." in t.text and 6.0 <= float(t.text.strip()) <= 7.5]
+        
+        if not times:
+            st.error("展示タイムが取得できませんでした。レース前か通信エラーの可能性があります。")
+        else:
+            # 判定ロジック適用
+            best_time = min(times)
+            avg_time = sum(times) / len(times)
             
-            # OCR解析
-            crop_img = img_array[int(height*0.2):int(height*0.8), int(width*0.3):int(width*0.6)]
-            img_gray = cv2.cvtColor(crop_img, cv2.COLOR_RGB2GRAY)
-            text = pytesseract.image_to_string(img_gray, config='--oem 3 --psm 6')
+            st.subheader("📊 解析結果")
+            st.metric("最速展示タイム", f"{best_time:.2f}秒")
+            st.write(f"平均タイム: {avg_time:.2f}秒")
             
-            # 数値抽出（6.00〜7.50）
-            all_numbers = re.findall(r'\d\.\d{2}', text)
-            valid_times = sorted([float(num) for num in all_numbers if 6.00 <= float(num) <= 7.50])
-            
-            if not valid_times:
-                st.error("展示タイムが検出できませんでした。")
+            # AIロジック判定
+            if best_time < avg_time - 0.1:
+                st.warning("★【勝負レース判定】: 爆速足検知。軸候補です！")
+                st.write("推奨買い目: 1-23-2345 (6点固定)")
             else:
-                best_time = valid_times[0]
-                st.success(f"【最速タイム】: {best_time}秒")
-
-                # --- 3. ロジック判定 ---
-                # ここにトリガー検知などを統合
-                st.write("--- 意思決定結果 ---")
+                st.info("★【見送り推奨】: タイムが拮抗しています。")
                 
-                # 簡易判定例
-                if best_time < 6.50:
-                    st.warning("★【勝負レース判定】: 爆速足検知。軸候補です。")
-                    # フォーメーション提示
-                    st.write("推奨買い目: 1-23-2345")
-                else:
-                    st.info("★【見送り推奨】: タイムが拮抗しています。")
-
-                # --- 4. 悪魔の代弁者（最終確認） ---
-                st.divider()
-                st.subheader("👿 悪魔の代弁者：最終確認")
-                if st.checkbox("損害（負け）を許容し、勝負を承認する"):
-                    st.balloons()
-                    st.success("購入承認：健闘を祈ります！")
+            # 悪魔の代弁者（損切可視化）
+            st.divider()
+            st.subheader("👿 悪魔の代弁者：最終確認")
+            if st.checkbox("損害（負け）を許容し、勝負を承認する"):
+                st.balloons()
+                st.success("購入承認：健闘を祈ります！")
+                
+    except Exception as e:
+        st.error(f"システムエラー: {e}")
