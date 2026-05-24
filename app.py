@@ -13,34 +13,34 @@ if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption="解析対象の画像", use_column_width=True)
     
-    if st.button("展示タイムを解析する"):
+    if st.button("展示タイムを解析して予想する"):
         with st.spinner('解析中...'):
             img_array = np.array(image.convert('RGB'))
             height, width, _ = img_array.shape
             
-            # 【調整済】縦画面用：中央付近のタイム列を狙って切り抜き
-            # 横幅(width)の 30%〜60% の範囲を切り抜きます
+            # 解析エリアの切り抜き
             crop_img = img_array[int(height*0.2):int(height*0.8), int(width*0.3):int(width*0.6)]
             img_gray = cv2.cvtColor(crop_img, cv2.COLOR_RGB2GRAY)
             
-            # OCR実行（数字認識に特化）
-            custom_config = r'--oem 3 --psm 6'
-            text = pytesseract.image_to_string(img_gray, config=custom_config)
+            # OCR実行
+            text = pytesseract.image_to_string(img_gray, config='--oem 3 --psm 6')
             
-            # 競艇の展示タイム（6.00〜7.50の範囲）のみを抽出するロジック
+            # 数値抽出
             all_numbers = re.findall(r'\d\.\d{2}', text)
-            valid_times = []
-            for num in all_numbers:
-                val = float(num)
-                if 6.00 <= val <= 7.50:
-                    valid_times.append(val)
+            valid_times = sorted([float(num) for num in all_numbers if 6.00 <= float(num) <= 7.50])
             
-            st.write("### --- 解析結果 ---")
+            st.write("### --- AI予想レポート ---")
             if valid_times:
-                # 重複を削除して昇順に並べる（速い順）
-                unique_times = sorted(list(set(valid_times)))
-                for time in unique_times:
-                    st.success(f"検出タイム: {time}")
+                best_time = valid_times[0]
+                st.success(f"【最速タイム】: {best_time}秒")
+                
+                # 予想ロジック：平均タイムとの比較
+                avg_time = sum(valid_times) / len(valid_times)
+                st.write(f"平均タイム: {avg_time:.2f}秒")
+                
+                if best_time < avg_time - 0.1:
+                    st.warning("★AIの判定: このレースは最速タイムの艇が突出しています。軸に最適です！")
+                else:
+                    st.info("AIの判定: タイムが拮抗しています。混戦模様です。")
             else:
-                st.warning("展示タイムが見つかりませんでした。")
-                st.text("もし何も出ない場合は、設定の範囲（width*0.3:0.6）を少しずらしてみてください。")
+                st.warning("タイムが正常に読み取れませんでした。")
