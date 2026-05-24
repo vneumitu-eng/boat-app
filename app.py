@@ -2,11 +2,12 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-import json
+import re
 
-st.title("🤖 AI競艇エンジン v7.0【公式データ直結版】")
+st.title("🤖 AI競艇エンジン v7.0【実戦直結版】")
 
-# 開催地マッピング
+# 開催地マッピング（艇国データバンクのコードに合わせる）
+# 艇国データバンクのIDに合わせて定義
 jcd_map = {"桐生": "01", "戸田": "02", "江戸川": "03", "平和島": "04", "多摩川": "05", 
            "浜名湖": "06", "蒲郡": "07", "常滑": "08", "津": "09", "三国": "10", 
            "びわこ": "11", "住之江": "12", "尼崎": "13", "鳴門": "14", "丸亀": "15", 
@@ -16,45 +17,51 @@ jcd_map = {"桐生": "01", "戸田": "02", "江戸川": "03", "平和島": "04",
 stadium = st.selectbox("開催場を選択", list(jcd_map.keys()))
 race_num = st.selectbox("レース番号", range(1, 13))
 
-if st.button("公式データから自動解析を実行"):
-    date_str = datetime.now().strftime("%Y%m%d")
-    # 出走表ページに一度アクセスして、データJSONのURLを探す（今回は簡易的にAPI直叩きの構成を想定）
-    # ※公式サイトのデータ提供形式に基づいたロジック
-    url = f"https://www.boatrace.jp/owpc/pc/race/index?rno={race_num}&jcd={jcd_map[stadium]}&hd={date_str}"
+if st.button("データバンクから自動解析を実行"):
+    # 今日の日付
+    d = datetime.now()
+    # 艇国データバンクのURL形式
+    url = f"https://www.teikoku-db.net/race/index.php?y={d.year}&m={d.month}&d={d.day}&j={jcd_map[stadium]}&r={race_num}"
     
     try:
-        # 簡易版：実際の展示タイム取得には、公式サイトが裏側で呼んでいるJSONを参照するのが最も確実です
-        st.info("公式サイトへアクセス中...")
+        st.info(f"解析中: {url}")
         headers = {"User-Agent": "Mozilla/5.0"}
         res = requests.get(url, headers=headers)
-        
-        # 抽出ロジック（公式サイトの特定の隠しデータクラスを狙い撃ち）
+        res.encoding = res.apparent_encoding
         soup = BeautifulSoup(res.text, "html.parser")
         
-        # 展示タイムは 'is-fs18' クラスにあります
+        # 艇国データバンクの構造から展示タイムを抽出
+        # タイムはテーブル内の数値として確実に入っています
         times = []
-        for el in soup.select(".is-fs18"):
-            text = el.text.strip()
-            # 6秒台〜7秒台の数値のみを抽出
-            if len(text) == 4 and "." in text:
+        for td in soup.find_all("td"):
+            text = td.text.strip()
+            if re.match(r'^[67]\.\d{2}$', text):
                 times.append(float(text))
         
-        # 重複を除く（同じ数値の排除）
+        # 重複削除
         times = sorted(list(set(times)))
         
         if times:
-            st.success("データ取得成功！")
-            st.write(f"取得タイム: {times}")
-            
             best_time = min(times)
+            avg_time = sum(times) / len(times)
+            
+            st.success("データ取得成功！")
             st.metric("最速展示タイム", f"{best_time:.2f}秒")
             
-            if best_time < 6.50:
+            # AI判定エンジン
+            if best_time < avg_time - 0.1:
                 st.warning("★【勝負レース判定】: 爆速足検知！")
+                st.write("推奨買い目: 1-23-2345")
             else:
-                st.info("★【見送り推奨】")
+                st.info("★【見送り推奨】: タイムが拮抗しています。")
+                
+            st.divider()
+            if st.checkbox("損害を許容し、勝負を承認する"):
+                st.balloons()
+                st.success("購入承認：健闘を祈ります！")
         else:
-            st.error("現在、展示タイムデータが公開されていないか、取得できませんでした。")
+            st.error("展示タイムが見つかりませんでした。")
+            st.write("サイト上の表示を確認してください:", url)
             
     except Exception as e:
         st.error(f"システムエラー: {e}")
