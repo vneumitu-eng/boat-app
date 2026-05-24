@@ -22,7 +22,7 @@ if uploaded_file is not None:
         
         # OCRで文字を読み取る
         try:
-            text = pytesseract.image_to_string(img_gray, lang='jpn') # 日本語モード
+            text = pytesseract.image_to_string(img_gray, config='--psm 6') # 日本語モード
             st.write("--- 解析結果 ---")
             st.text(text)
         except Exception as e:
