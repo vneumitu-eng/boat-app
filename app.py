@@ -3,7 +3,7 @@ from PIL import Image
 import pytesseract
 import cv2
 import numpy as np
-import re # 追加：文字列解析のため
+import re
 
 st.title("AI競艇エンジン v7.0")
 
@@ -18,28 +18,29 @@ if uploaded_file is not None:
             img_array = np.array(image.convert('RGB'))
             height, width, _ = img_array.shape
             
-            # 画像の中央付近にエリアを絞る
-            crop_img = img_array[int(height*0.3):int(height*0.7), 0:width]
+            # 【調整済】縦画面用：中央付近のタイム列を狙って切り抜き
+            # 横幅(width)の 30%〜60% の範囲を切り抜きます
+            crop_img = img_array[int(height*0.2):int(height*0.8), int(width*0.3):int(width*0.6)]
             img_gray = cv2.cvtColor(crop_img, cv2.COLOR_RGB2GRAY)
             
-            # OCR実行
+            # OCR実行（数字認識に特化）
             custom_config = r'--oem 3 --psm 6'
             text = pytesseract.image_to_string(img_gray, config=custom_config)
             
-            st.write("### --- 抽出された展示タイム候補 ---")
+            # 競艇の展示タイム（6.00〜7.50の範囲）のみを抽出するロジック
+            all_numbers = re.findall(r'\d\.\d{2}', text)
+            valid_times = []
+            for num in all_numbers:
+                val = float(num)
+                if 6.00 <= val <= 7.50:
+                    valid_times.append(val)
             
-            # 【重要】正規表現を使って「X.XX」という形式の数字だけを抽出する
-            # 小数点を含む数字を探すためのフィルターです
-            found_times = re.findall(r'\d\.\d{2}', text)
-            
-            if found_times:
-                # 重複を削除して表示
-                unique_times = sorted(list(set(found_times)))
+            st.write("### --- 解析結果 ---")
+            if valid_times:
+                # 重複を削除して昇順に並べる（速い順）
+                unique_times = sorted(list(set(valid_times)))
                 for time in unique_times:
                     st.success(f"検出タイム: {time}")
             else:
-                st.warning("展示タイムが見つかりませんでした。別の範囲を切り抜く必要があります。")
-                st.warning("数字を検出できませんでした。画像を明るくして再試行してください。")
-
-# 解析の仕組みを可視化
-st.info("※解析精度を上げるには、画像の『展示タイム』部分を大きく映して撮影してください。")
+                st.warning("展示タイムが見つかりませんでした。")
+                st.text("もし何も出ない場合は、設定の範囲（width*0.3:0.6）を少しずらしてみてください。")
