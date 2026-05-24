@@ -25,3 +25,19 @@ else:
     else:
         st.write(f"計算用仮想オッズ: {virtual_odds:.2f}")
         st.write(f"推奨投資額: {int(total_funds * 0.5)}円 (総資金の50%)")
+# --- 紐選定・フォーメーション自動スイッチ ---
+def get_formation(is_2course_collapse):
+    if is_2course_collapse:
+        # 2コース自滅展開（1-34-2345）
+        return ["1-3-2", "1-3-4", "1-3-5", "1-4-2", "1-4-3", "1-4-5"]
+    else:
+        # 通常展開（1-23-2345）
+        return ["1-2-3", "1-2-4", "1-2-5", "1-3-2", "1-3-4", "1-3-5"]
+
+# --- 悪魔の代弁者（損切可視化）---
+def show_devils_advocate(total_investment):
+    st.sidebar.warning("👿 悪魔の代弁者：最終確認")
+    st.sidebar.write(f"もし1号艇が飛んだ場合、あなたは {total_investment}円 を失います。")
+    if st.sidebar.checkbox("損害を許容し、勝負を承認する"):
+        return True
+    return False
